@@ -1,0 +1,394 @@
+<title>Sales Segment Dashboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+  /* Layout: a filter bar on top, KPI strip, then the segment deep-dive, then trend / category / city panels. */
+  :root {
+    --bg: #f4f6f8; --surface: #ffffff; --ink: #111418; --ink2: #545b66; --line: #e1e5ea;
+    --accent: #2a78d6; --bar-muted: #c3c9d1;
+    --seg1: #2a78d6; --seg2: #94bdee; --seg3: #eb6834; --seg4: #f4b49b;
+    --pos: #0e7a4f; --neg: #b4381a; --focus: #2a78d6;
+    --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-head: "Space Grotesk", "Inter", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --surface: #171b21; --ink: #eceef1; --ink2: #a3abb7; --line: #272d36;
+      --accent: #4a90e6; --bar-muted: #3d4551;
+      --seg1: #4a90e6; --seg2: #7ea7d8; --seg3: #e5703f; --seg4: #b8785c;
+      --pos: #3fc08a; --neg: #f0866a; --focus: #7db2f2; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --surface: #171b21; --ink: #eceef1; --ink2: #a3abb7; --line: #272d36;
+    --accent: #4a90e6; --bar-muted: #3d4551;
+    --seg1: #4a90e6; --seg2: #7ea7d8; --seg3: #e5703f; --seg4: #b8785c;
+    --pos: #3fc08a; --neg: #f0866a; --focus: #7db2f2; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.45;
+         padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px));
+         padding-right: max(16px, env(safe-area-inset-right, 0px)); font-variant-numeric: tabular-nums; }
+  .wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  h1, h2, h3 { font-family: var(--font-head); margin: 0; text-wrap: balance; }
+  h1 { font-size: 26px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; }
+  .sub { color: var(--ink2); margin: 4px 0 0; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+  .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .panel-head p { margin: 0; color: var(--ink2); font-size: 12.5px; }
+
+  /* filters */
+  .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; align-items: end; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink2); font-weight: 600; }
+  select, button { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+                   padding: 8px 10px; min-width: 0; width: 100%; }
+  select:focus-visible, button:focus-visible, .seg-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button.reset { cursor: pointer; font-weight: 600; }
+  button.reset:hover { border-color: var(--accent); }
+  .status { margin-top: 10px; color: var(--ink2); font-size: 12.5px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chip { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--ink); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+
+  /* kpis */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .kpi .name { font-size: 12px; color: var(--ink2); font-weight: 600; }
+  .kpi .val { font-family: var(--font-head); font-size: 28px; font-weight: 700; margin: 4px 0 2px; letter-spacing: -0.01em; }
+  .kpi .note { font-size: 12px; color: var(--ink2); }
+  .pos { color: var(--pos); } .neg { color: var(--neg); }
+
+  /* segments */
+  .segs { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .seg-card { text-align: left; cursor: pointer; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--surface);
+              display: flex; flex-direction: column; gap: 6px; position: relative; }
+  .seg-card:hover { border-color: var(--ink2); }
+  .seg-card[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+  .seg-card .top { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  .seg-card .rule { font-size: 12px; color: var(--ink2); }
+  .seg-card .big { font-family: var(--font-head); font-size: 26px; font-weight: 700; }
+  .seg-card .big small { font-family: var(--font-ui); font-size: 12px; font-weight: 500; color: var(--ink2); }
+  .bars { display: flex; flex-direction: column; gap: 4px; }
+  .barrow { display: grid; grid-template-columns: 62px 1fr 40px; gap: 6px; align-items: center; font-size: 11.5px; color: var(--ink2); }
+  .track { height: 8px; background: var(--bar-muted); border-radius: 4px; overflow: hidden; opacity: 0.55; }
+  .fill { height: 100%; border-radius: 4px; }
+  .insight { margin: 0 0 14px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--accent) 10%, transparent); font-size: 13.5px; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .chart-box { position: relative; height: 270px; }
+  .chart-box.tall { height: 300px; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--ink2); font-weight: 600; font-size: 12px; }
+  .heat { border-radius: 4px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+  .hint { color: var(--ink2); font-size: 12px; margin: 0 0 8px; }
+  .notes { color: var(--ink2); font-size: 12.5px; }
+  .notes ul { margin: 6px 0 0; padding-left: 18px; }
+  .nochart { color: var(--ink2); padding: 20px; }
+  @media (max-width: 520px) { h1 { font-size: 22px; } .kpi .val { font-size: 24px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Sales Segment Dashboard</h1>
+    <p class="sub">1,000 orders, Jan 2025 to 1 Jan 2026. Choose filters, or click a segment or a bar, to explore.</p>
+  </header>
+
+  <section class="panel" aria-label="Filters">
+    <div class="filters">
+      <div class="field"><label for="f-from">From month</label><select id="f-from"></select></div>
+      <div class="field"><label for="f-to">To month</label><select id="f-to"></select></div>
+      <div class="field"><label for="f-city">City</label><select id="f-city"></select></div>
+      <div class="field"><label for="f-cat">Category</label><select id="f-cat"></select></div>
+      <div class="field"><label for="f-gender">Gender</label><select id="f-gender"></select></div>
+      <div class="field"><label for="f-age">Age group</label><select id="f-age"></select></div>
+      <div class="field"><label for="f-seg">Segment</label><select id="f-seg"></select></div>
+      <div class="field"><label for="f-reset">&nbsp;</label><button id="f-reset" class="reset" type="button">Reset filters</button></div>
+    </div>
+    <div class="status" id="status" role="status"></div>
+  </section>
+
+  <section class="kpis" aria-label="Core KPIs" id="kpis"></section>
+
+  <section class="panel" aria-label="Segment deep-dive">
+    <div class="panel-head">
+      <h2>Deep dive: order segments</h2>
+      <p id="segrule"></p>
+    </div>
+    <div class="segs" id="segs"></div>
+    <p class="insight" id="insight"></p>
+    <div class="two">
+      <div>
+        <h3 style="font-size:14px;margin-bottom:6px">Share of orders vs share of revenue</h3>
+        <div class="chart-box"><canvas id="c-seg" role="img" aria-label="Share of orders versus share of revenue by segment"></canvas></div>
+      </div>
+      <div>
+        <h3 style="font-size:14px;margin-bottom:6px">Segment mix inside each category</h3>
+        <p class="hint">% of each category's revenue (columns add to 100%).</p>
+        <div class="scroll"><table id="heat"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Revenue by month">
+    <div class="panel-head">
+      <h2>Monthly revenue by segment</h2>
+      <p>INR million. Jan 26 is a partial month (5 orders).</p>
+    </div>
+    <div class="chart-box tall"><canvas id="c-month" role="img" aria-label="Monthly revenue stacked by segment"></canvas></div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel" aria-label="Revenue by category">
+      <div class="panel-head"><h2>Revenue by category</h2><p>INR million. Click a bar to filter.</p></div>
+      <div class="chart-box"><canvas id="c-cat" role="img" aria-label="Revenue by category"></canvas></div>
+    </section>
+    <section class="panel" aria-label="Revenue by city">
+      <div class="panel-head"><h2>Revenue by city</h2><p>INR million. Click a bar to filter.</p></div>
+      <div class="chart-box"><canvas id="c-city" role="img" aria-label="Revenue by city"></canvas></div>
+    </section>
+  </div>
+
+  <section class="panel notes" aria-label="Definitions">
+    <h2>Definitions and data notes</h2>
+    <ul>
+      <li><b>Segments</b> (business rules): Premium = unit price at or above the median (<span id="n-price"></span>); Bulk = 6 to 10 units per order; Light = 1 to 5 units.</li>
+      <li><b>AOV</b> = revenue / orders. <b>MoM growth</b> = (last full month - previous month) / previous month within the selected range; January 2026 is excluded as a partial month. <b>Top-20% concentration</b> = revenue of the largest 20% of orders / total revenue.</li>
+      <li>13 orders have an unknown city. 20 orders had a missing age filled in Task 1, so they appear as "Unknown" in the age filter.</li>
+      <li>The dataset behaves like simulated data (flat distributions, wide price ranges for every product), so treat the patterns as a demonstration of method.</li>
+    </ul>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const DATA = __DATA__;
+(function () {
+  const D = DATA.dims, R = DATA.rows;
+  const SEGS = D.segments;
+  const RULES = { "Premium Bulk": "High price, 6-10 units", "Premium Light": "High price, 1-5 units",
+                  "Value Bulk": "Lower price, 6-10 units", "Value Light": "Lower price, 1-5 units" };
+  const S = { from: 0, to: D.months.length - 1, city: "", cat: "", gender: "", age: "", seg: "" };
+  const $ = id => document.getElementById(id);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const MN = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const monthLabel = ym => { const [y, m] = ym.split("-"); return MN[+m - 1] + " " + y.slice(2); };
+  const inr = v => v >= 1e6 ? "₹" + (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? "₹" + (v / 1e3).toFixed(1) + "K" : "₹" + Math.round(v);
+  const pct = v => v.toFixed(1) + "%";
+  $("n-price").textContent = inr(DATA.cuts.price);
+
+  // ---------- filters ----------
+  function fill(sel, items, allLabel) {
+    sel.innerHTML = "";
+    if (allLabel) sel.add(new Option(allLabel, ""));
+    items.forEach((t, i) => sel.add(new Option(t, String(i))));
+  }
+  fill($("f-from"), D.months.map(monthLabel));
+  fill($("f-to"), D.months.map(monthLabel));
+  fill($("f-city"), D.cities, "All cities");
+  fill($("f-cat"), D.categories, "All categories");
+  fill($("f-gender"), D.genders, "All");
+  fill($("f-age"), D.ageGroups.map(a => a === "Unknown" ? "Unknown (age filled in)" : a), "All ages");
+  fill($("f-seg"), SEGS, "All segments");
+  $("f-to").value = String(S.to);
+  const keys = { "f-from": "from", "f-to": "to", "f-city": "city", "f-cat": "cat", "f-gender": "gender", "f-age": "age", "f-seg": "seg" };
+  Object.keys(keys).forEach(id => $(id).addEventListener("change", e => {
+    const k = keys[id]; S[k] = e.target.value === "" ? "" : +e.target.value;
+    if (S.from > S.to) { if (k === "from") S.to = S.from; else S.from = S.to; syncMonthSelects(); }
+    render();
+  }));
+  function syncMonthSelects() { $("f-from").value = String(S.from); $("f-to").value = String(S.to); }
+  function syncSelects() {
+    syncMonthSelects();
+    $("f-city").value = S.city === "" ? "" : String(S.city); $("f-cat").value = S.cat === "" ? "" : String(S.cat);
+    $("f-gender").value = S.gender === "" ? "" : String(S.gender); $("f-age").value = S.age === "" ? "" : String(S.age);
+    $("f-seg").value = S.seg === "" ? "" : String(S.seg);
+  }
+  $("f-reset").addEventListener("click", () => { Object.assign(S, { from: 0, to: D.months.length - 1, city: "", cat: "", gender: "", age: "", seg: "" }); syncSelects(); render(); });
+
+  // rows [m,c,p,ci,g,a,q,pr,s,sg]; "skip" lists filter keys to ignore
+  function rows(skip = []) {
+    return R.filter(r => r[0] >= S.from && r[0] <= S.to &&
+      (skip.includes("city") || S.city === "" || r[3] === S.city) &&
+      (skip.includes("cat") || S.cat === "" || r[1] === S.cat) &&
+      (S.gender === "" || r[4] === S.gender) && (S.age === "" || r[5] === S.age) &&
+      (skip.includes("seg") || S.seg === "" || r[9] === S.seg));
+  }
+  const sum = (a, i) => a.reduce((t, r) => t + r[i], 0);
+
+  // ---------- KPI strip ----------
+  function renderKpis(a) {
+    const n = a.length, rev = sum(a, 8);
+    let aov = "–", med = "", mom = "–", momNote = "needs two full months in range", momCls = "";
+    if (n) {
+      aov = inr(rev / n);
+      const s = a.map(r => r[8]).sort((x, y) => x - y);
+      const m = s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+      med = "median " + inr(m);
+    }
+    const byM = {}; a.forEach(r => { if (r[0] < D.months.length - 1) byM[r[0]] = (byM[r[0]] || 0) + r[8]; });
+    const ms = Object.keys(byM).map(Number).sort((x, y) => x - y);
+    if (ms.length >= 2) {
+      const cur = byM[ms[ms.length - 1]], prev = byM[ms[ms.length - 2]];
+      const g = (cur - prev) / prev * 100;
+      mom = (g >= 0 ? "▲ +" : "▼ ") + g.toFixed(1) + "%"; momCls = g >= 0 ? "pos" : "neg";
+      momNote = monthLabel(D.months[ms[ms.length - 1]]) + " vs " + monthLabel(D.months[ms[ms.length - 2]]);
+    }
+    let conc = "–", concNote = "needs at least 5 orders";
+    if (n >= 5) {
+      const k = Math.ceil(n * 0.2), top = a.map(r => r[8]).sort((x, y) => y - x).slice(0, k).reduce((t, v) => t + v, 0);
+      conc = pct(top / rev * 100); concNote = "top " + k + " of " + n + " orders";
+    }
+    const tiles = [
+      ["Total revenue", n ? inr(rev) : "–", "sum of order value", ""],
+      ["Orders", n.toLocaleString("en-IN"), "count of orders", ""],
+      ["Average order value", aov, med || "revenue / orders", ""],
+      ["MoM revenue growth", mom, momNote, momCls],
+      ["Top-20% concentration", conc, concNote, ""],
+    ];
+    $("kpis").innerHTML = tiles.map(t => `<div class="kpi"><div class="name">${t[0]}</div><div class="val ${t[3]}">${t[1]}</div><div class="note">${t[2]}</div></div>`).join("");
+  }
+
+  // ---------- segments ----------
+  const segColor = i => css("--seg" + (i + 1));
+  function renderSegments() {
+    const a = rows(["seg"]), tot = sum(a, 8), n = a.length;
+    const st = SEGS.map((_, i) => { const x = a.filter(r => r[9] === i); return { n: x.length, rev: sum(x, 8) }; });
+    $("segs").innerHTML = SEGS.map((name, i) => {
+      const o = n ? st[i].n / n * 100 : 0, r = tot ? st[i].rev / tot * 100 : 0, aov = st[i].n ? st[i].rev / st[i].n : 0;
+      return `<button type="button" class="seg-card" data-i="${i}" aria-pressed="${S.seg === i}">
+        <div class="top"><span class="swatch" style="background:${segColor(i)}"></span>${name}</div>
+        <div class="rule">${RULES[name]}</div>
+        <div class="big">${pct(r)} <small>of revenue</small></div>
+        <div class="bars">
+          <div class="barrow"><span>Orders</span><div class="track"><div class="fill" style="width:${o}%;background:var(--ink2)"></div></div><span>${o.toFixed(0)}%</span></div>
+          <div class="barrow"><span>Revenue</span><div class="track" style="opacity:1;background:color-mix(in srgb, var(--bar-muted) 45%, transparent)"><div class="fill" style="width:${r}%;background:${segColor(i)}"></div></div><span>${r.toFixed(0)}%</span></div>
+        </div>
+        <div class="rule">${st[i].n} orders, AOV ${st[i].n ? inr(aov) : "–"}</div></button>`;
+    }).join("");
+    document.querySelectorAll(".seg-card").forEach(b => b.addEventListener("click", () => {
+      const i = +b.dataset.i; S.seg = S.seg === i ? "" : i; syncSelects(); render();
+    }));
+    const pb = st[0];
+    if (n && pb.n) {
+      const o = pb.n / n * 100, r = pb.rev / tot * 100;
+      $("insight").textContent = `Premium Bulk is ${o.toFixed(0)}% of orders but ${r.toFixed(0)}% of revenue (${(r / o).toFixed(1)}x its order share) in this view.`;
+    } else $("insight").textContent = "No Premium Bulk orders in this view.";
+    $("segrule").textContent = "Click a card to filter the whole dashboard to that segment.";
+    return { st, tot, n };
+  }
+
+  function renderHeat() {
+    const a = rows(["seg", "cat"]);
+    const cols = D.categories.map((_, ci) => a.filter(r => r[1] === ci));
+    const ctot = cols.map(c => sum(c, 8));
+    let h = "<thead><tr><th>Segment</th>" + D.categories.map(c => `<th>${c}</th>`).join("") + "</tr></thead><tbody>";
+    SEGS.forEach((s, si) => {
+      h += `<tr><td><span class="swatch" style="background:${segColor(si)};display:inline-block;margin-right:6px;vertical-align:-1px"></span>${s}</td>`;
+      cols.forEach((c, ci) => {
+        const v = ctot[ci] ? sum(c.filter(r => r[9] === si), 8) / ctot[ci] * 100 : 0;
+        h += `<td><span class="heat" style="display:inline-block;min-width:48px;padding:2px 8px;background:color-mix(in srgb, var(--accent) ${Math.round(v * 0.9)}%, transparent)">${ctot[ci] ? v.toFixed(0) + "%" : "–"}</span></td>`;
+      });
+      h += "</tr>";
+    });
+    $("heat").innerHTML = h + "</tbody>";
+  }
+
+  // ---------- charts ----------
+  const labelPlugin = {
+    id: "vlabels",
+    afterDatasetsDraw(chart, _a, opts) {
+      if (!opts || !opts.fmt) return;
+      const ctx = chart.ctx, horiz = chart.options.indexAxis === "y";
+      ctx.save(); ctx.fillStyle = css("--ink2"); ctx.font = "11px " + css("--font-ui");
+      chart.data.datasets.forEach((ds, di) => chart.getDatasetMeta(di).data.forEach((bar, i) => {
+        const v = ds.data[i]; if (v == null) return;
+        const t = opts.fmt(v);
+        if (horiz) { ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(t, bar.x + 5, bar.y); }
+        else { ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(t, bar.x, bar.y - 4); }
+      }));
+      ctx.restore();
+    }
+  };
+  let charts = {};
+  const hasChart = typeof Chart !== "undefined";
+  function baseOpts(extra) {
+    return Object.assign({ responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
+      plugins: { legend: { display: false }, vlabels: null } }, extra);
+  }
+  function build() {
+    if (!hasChart) { ["c-seg", "c-month", "c-cat", "c-city"].forEach(id => { $(id).parentElement.innerHTML = '<p class="nochart">Charts need internet access to load the Chart.js library. The tables and KPIs still work.</p>'; }); return; }
+    Object.values(charts).forEach(c => c.destroy()); charts = {};
+    const ink2 = css("--ink2"), line = css("--line");
+    Chart.defaults.color = ink2; Chart.defaults.borderColor = line; Chart.defaults.font.family = css("--font-ui");
+    const axes = (yFmt) => ({ x: { grid: { display: false } }, y: { beginAtZero: true, grid: { color: line }, ticks: { callback: yFmt } } });
+    charts.seg = new Chart($("c-seg"), { type: "bar", plugins: [labelPlugin],
+      data: { labels: SEGS, datasets: [{ label: "Share of orders", data: [], backgroundColor: css("--bar-muted"), borderRadius: 4, maxBarThickness: 34 },
+                                       { label: "Share of revenue", data: [], backgroundColor: css("--accent"), borderRadius: 4, maxBarThickness: 34 }] },
+      options: baseOpts({ plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12 } }, vlabels: { fmt: v => v.toFixed(0) + "%" },
+        tooltip: { callbacks: { label: c => c.dataset.label + ": " + c.parsed.y.toFixed(1) + "%" } } },
+        scales: axes(v => v + "%") }) });
+    charts.month = new Chart($("c-month"), { type: "bar",
+      data: { labels: [], datasets: SEGS.map((s, i) => ({ label: s, data: [], backgroundColor: segColor(i), stack: "s", maxBarThickness: 40 })) },
+      options: baseOpts({ plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 12 } }, vlabels: null,
+        tooltip: { callbacks: { label: c => c.dataset.label + ": " + inr(c.parsed.y * 1e6) } } },
+        scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, grid: { color: line }, ticks: { callback: v => v + "M" } } } }) });
+    ["cat", "city"].forEach(k => {
+      charts[k] = new Chart($("c-" + k), { type: "bar", plugins: [labelPlugin],
+        data: { labels: [], datasets: [{ label: "Revenue", data: [], backgroundColor: [], borderRadius: 4, maxBarThickness: 24 }] },
+        options: baseOpts({ indexAxis: "y", layout: { padding: { right: 46 } },
+          plugins: { legend: { display: false }, vlabels: { fmt: v => v.toFixed(1) + "M" }, tooltip: { callbacks: { label: c => "Revenue: " + inr(c.parsed.x * 1e6) } } },
+          scales: { x: { beginAtZero: true, grid: { color: line }, ticks: { callback: v => v + "M" } }, y: { grid: { display: false } } },
+          onClick: (_e, els) => { if (!els.length) return; const idx = charts[k].$ids[els[0].index]; S[k] = S[k] === idx ? "" : idx; syncSelects(); render(); } }) });
+    });
+  }
+  function barData(chart, key, items, filterKey) {
+    const a = rows([filterKey]), totals = items.map((_, i) => sum(a.filter(r => r[key] === i), 8) / 1e6);
+    const order = totals.map((v, i) => i).sort((x, y) => totals[y] - totals[x]);
+    chart.$ids = order; chart.data.labels = order.map(i => items[i]);
+    const ds = chart.data.datasets[0]; ds.data = order.map(i => +totals[i].toFixed(2));
+    ds.backgroundColor = order.map(i => (S[filterKey] === "" || S[filterKey] === i) ? css("--accent") : css("--bar-muted"));
+    chart.canvas.setAttribute("aria-label", "Revenue by " + filterKey + ": " + order.map(i => items[i] + " " + totals[i].toFixed(1) + "M").join(", "));
+    chart.update();
+  }
+  function renderCharts(segInfo) {
+    if (!hasChart) return;
+    const { st, tot, n } = segInfo;
+    charts.seg.data.datasets[0].data = st.map(x => n ? x.n / n * 100 : 0);
+    charts.seg.data.datasets[1].data = st.map(x => tot ? x.rev / tot * 100 : 0);
+    charts.seg.update();
+    const a = rows(), ms = []; for (let m = S.from; m <= S.to; m++) ms.push(m);
+    charts.month.data.labels = ms.map(m => monthLabel(D.months[m]) + (m === D.months.length - 1 ? "*" : ""));
+    SEGS.forEach((_, si) => { charts.month.data.datasets[si].data = ms.map(m => +(sum(a.filter(r => r[0] === m && r[9] === si), 8) / 1e6).toFixed(2)); });
+    charts.month.update();
+    barData(charts.cat, 1, D.categories, "cat");
+    barData(charts.city, 3, D.cities, "city");
+  }
+
+  // ---------- main render ----------
+  function render() {
+    const a = rows(), total = R.length;
+    const active = [];
+    if (S.from !== 0 || S.to !== D.months.length - 1) active.push(monthLabel(D.months[S.from]) + " to " + monthLabel(D.months[S.to]));
+    if (S.city !== "") active.push(D.cities[S.city]); if (S.cat !== "") active.push(D.categories[S.cat]);
+    if (S.gender !== "") active.push(D.genders[S.gender]); if (S.age !== "") active.push("Age " + D.ageGroups[S.age]);
+    if (S.seg !== "") active.push(SEGS[S.seg]);
+    $("status").innerHTML = `<span>Showing <b>${a.length.toLocaleString("en-IN")}</b> of ${total.toLocaleString("en-IN")} orders</span>` +
+      active.map(t => `<span class="chip">${t}</span>`).join("") +
+      (a.length === 0 ? " <b>No orders match these filters. Try resetting.</b>" : a.length < 30 ? " <b>Small sample: percentages swing a lot with so few orders.</b>" : "");
+    renderKpis(a); const info = renderSegments(); renderHeat(); renderCharts(info);
+  }
+
+  function boot() { build(); render(); }
+  boot();
+  // rebuild charts when the theme changes
+  const rebuild = () => { build(); render(); };
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rebuild); } catch (e) {}
+  new MutationObserver(rebuild).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+})();
+</script>
